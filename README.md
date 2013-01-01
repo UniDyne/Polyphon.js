@@ -1,6 +1,6 @@
 Polyphon
 ========
-*Polyphon*: /A sound and music generator in pure JavaScript./
+**Polyphon**: *A sound and music generator in pure JavaScript*
 
 ### What Is It? ###
 Polyphon allows one to generate music and sound programmatically in most web
