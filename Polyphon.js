@@ -24,20 +24,28 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **********************************************************************/
 /***
 	TODO:
-		* Support both WAV and AIF output
 		* Method to get the audio data URI (think download links)
 		* Use HTML5 audio control methods and callbacks for pausing and looping
 		* Allow multiple tracks... is track synchronization possible?
 		* More instruments and methods to register new ones at runtime
 		* Non-music functionality for better sound control
 		* Polyphonic tones with more than one instrument
+		* Fix: Polyphonics are much louder than they should be.
+		* Fix: AIFF output isn't working properly.
 ***/
 
 "use strict";
 
-function atos(a) { return String.fromCharCode.apply(String, a); }
-
 var Polyphon = new (function() {
+	var songs = {};
+	var tracks = {};
+	var songRef = null;
+	var track = null;
+	var loop = true;
+	var loopID = null;
+	var curInst = 'square';
+	var outFormat = 'wav';
+	
 	// Instruments
 	var Instr = {
 		square:		function(v,l){ var a = new Array(l); while(--l >= 0) a[l] = v; return a; },
@@ -47,10 +55,13 @@ var Polyphon = new (function() {
 		noise:		function(v,l){ var a = new Array(l); var n = 1; while(--n >= 0) a[n] = (v*Math.random())>>0; return a; }
 	};
 	
+	// Convert array of numbers to string.
+	function atos(a) { return String.fromCharCode.apply(String, a); }
+	
 	// Tone generator
 	function wavGen(len, tone, inst, poly, vol) {
 		vol = vol ? vol : 64;
-		if(inst) curInst = inst;
+		if(typeof inst !== 'undefined') curInst = inst;
 		var freq = Math.pow(Math.pow(2,1/12), tone) * 220;
 		var lenSamples = len * 44100 | 0;
 		var samplePartLen = 44100 / freq  | 0;
@@ -69,14 +80,60 @@ var Polyphon = new (function() {
 		return out;
 	}
 	
-	var songs = {};
-	var tracks = {};
-	var songRef = null;
-	var track = null;
-	var loop = true;
-	var loopID = null;
-	var curInst = 'square';
-	
+	// wrap 8-bit PCM data in an audio file
+	function wrapPCM(raw) {
+		var mimeData;
+		switch(outFormat) {
+			case 'aif':
+			case 'aiff':
+				mimeData = "data:audio/x-aiff;base64," + btoa(
+					"FORM" +
+					String.fromCharCode((raw.length+42)>>24&0xff) +
+					String.fromCharCode((raw.length+42)>>16&0xff) +
+					String.fromCharCode((raw.length+42)>>8&0xff) +
+					String.fromCharCode((raw.length+42)&0xff) +
+					"AIFFCOMM" + 
+					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(18) +	// common chunk 18 bytes
+					String.fromCharCode(0) + String.fromCharCode(1) +	// single channel
+					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0xac) + String.fromCharCode(0x44) +	// 44100 sample frames
+					String.fromCharCode(0) + String.fromCharCode(8) +	// 8-bit
+					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0x47) + String.fromCharCode(0x2c) + String.fromCharCode(0x44) + String.fromCharCode(0) +	// 44100 Hz, IEEE 754 float
+					"SSND" +
+					String.fromCharCode((raw.length+8)>>24&0xff) +
+					String.fromCharCode((raw.length+8)>>16&0xff) +
+					String.fromCharCode((raw.length+8)>>8&0xff) +
+					String.fromCharCode((raw.length+8)&0xff) +
+					String.fromCharCode(0) + String.fromCharCode(0) +	// offset 0
+					String.fromCharCode(0) + String.fromCharCode(0) +	// block size 0
+					raw
+					);
+				break;
+			case 'wav':
+			default:
+				mimeData = "data:audio/wav;base64," + btoa(
+					"RIFF" +
+					String.fromCharCode((raw.length+36)&0xff) +
+					String.fromCharCode((raw.length+36)>>8&0xff) +
+					String.fromCharCode((raw.length+36)>>16&0xff) +
+					String.fromCharCode((raw.length+36)>>24&0xff) +
+					"WAVEfmt " +
+					String.fromCharCode(16) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) +	// fmt chunk 16 bytes
+					String.fromCharCode(1) + String.fromCharCode(0) + // PCM format
+					String.fromCharCode(1) + String.fromCharCode(0) + // single channel
+					String.fromCharCode(68) + String.fromCharCode(172) + String.fromCharCode(0) + String.fromCharCode(0) +	// sample rate is 44100 Hz
+					String.fromCharCode(68) + String.fromCharCode(172) + String.fromCharCode(0) + String.fromCharCode(0) +	// byte rate is same
+					String.fromCharCode(1) + String.fromCharCode(0) +	// block aligned
+					String.fromCharCode(8) + String.fromCharCode(0) +	// 8-bit
+					"data" +
+					String.fromCharCode((raw.length)&0xff) +
+					String.fromCharCode((raw.length)>>8&0xff) +
+					String.fromCharCode((raw.length)>>16&0xff) +
+					String.fromCharCode((raw.length)>>24&0xff) +
+					raw);
+				break;
+		}
+		return mimeData;
+	}
 	
 	function buildSong(notes) {
 		var cache = {};
@@ -89,18 +146,11 @@ var Polyphon = new (function() {
 		}
 
 		// if already playing something, stop...
-		if(track != null) track.pause();
-		if(loopID != null) { clearInterval(loopID); loopID = null; }
+		//if(track != null) track.pause();
+		//if(loopID != null) { clearInterval(loopID); loopID = null; }
 		
-		// TODO: We should support AIF and WAV output. Some platforms do not work natively with WAV and vice-versa.
-		track = new Audio("data:audio/wav;base64,UklGRmisAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0" + btoa( "a"
-			+ String.fromCharCode(raw.length&0xff)
-			+ String.fromCharCode(raw.length>>8&0xff)
-			+ String.fromCharCode(raw.length>>16&0xff)
-			+ String.fromCharCode(raw.length>>24&0xff)
-			+ raw)
-		);
-		//track.play();
+		track = new Audio(wrapPCM(raw));
+		
 		tracks[songRef] = track;
 	}
 	
@@ -130,4 +180,5 @@ var Polyphon = new (function() {
 	this.pause = function() { if(track != null) track.pause(); if(loopID != null) { clearInterval(loopID); loopID = null; } };
 	
 	this.setInst = function(i) { curInst = i; };
+	this.setFormat = function(f) { outFormat = f; }
 })();
