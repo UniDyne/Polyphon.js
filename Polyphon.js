@@ -1,7 +1,7 @@
 /**********************************************************************
  Polyphon.js - A music generator and player in pure JS
 ***********************************************************************
-Copyright (C) 2012 Darien Oliver Brown <unidyne AT gmail.com>
+Copyright (C) 2013 Darien Oliver Brown <unidyne AT gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -31,7 +31,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		* Non-music functionality for better sound control
 		* Polyphonic tones with more than one instrument
 		* Fix: Polyphonics are much louder than they should be.
-		* Fix: AIFF output isn't working properly.
 ***/
 
 "use strict";
@@ -88,27 +87,30 @@ var Polyphon = new (function() {
 			case 'aiff':
 				mimeData = "data:audio/x-aiff;base64," + btoa(
 					"FORM" +
-					String.fromCharCode((raw.length+42)>>24&0xff) +
-					String.fromCharCode((raw.length+42)>>16&0xff) +
-					String.fromCharCode((raw.length+42)>>8&0xff) +
-					String.fromCharCode((raw.length+42)&0xff) +
+					String.fromCharCode((raw.length+46)>>24&0xff) +
+					String.fromCharCode((raw.length+46)>>16&0xff) +
+					String.fromCharCode((raw.length+46)>>8&0xff) +
+					String.fromCharCode((raw.length+46)&0xff) +
 					"AIFFCOMM" + 
 					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(18) +	// common chunk 18 bytes
 					String.fromCharCode(0) + String.fromCharCode(1) +	// single channel
-					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0xac) + String.fromCharCode(0x44) +	// 44100 sample frames
-					String.fromCharCode(0) + String.fromCharCode(8) +	// 8-bit
-					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0x47) + String.fromCharCode(0x2c) + String.fromCharCode(0x44) + String.fromCharCode(0) +	// 44100 Hz, IEEE 754 float
+					String.fromCharCode((raw.length)>>24&0xff) +	// sample frame count...
+					String.fromCharCode((raw.length)>>16&0xff) +
+					String.fromCharCode((raw.length)>>8&0xff) +
+					String.fromCharCode((raw.length)&0xff) +
+					String.fromCharCode(0) + String.fromCharCode(8) +	// 8-bit samples
+					String.fromCharCode(0x40) + String.fromCharCode(0x0e) + String.fromCharCode(0xac) + String.fromCharCode(0x44) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) +	// 44100 Hz, IEEE 754 float
 					"SSND" +
 					String.fromCharCode((raw.length+8)>>24&0xff) +
 					String.fromCharCode((raw.length+8)>>16&0xff) +
 					String.fromCharCode((raw.length+8)>>8&0xff) +
 					String.fromCharCode((raw.length+8)&0xff) +
-					String.fromCharCode(0) + String.fromCharCode(0) +	// offset 0
-					String.fromCharCode(0) + String.fromCharCode(0) +	// block size 0
+					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) +	// offset 0
+					String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) +	// block size 0
 					raw
 					);
 				break;
-			case 'wav':
+			case 'wav':;
 			default:
 				mimeData = "data:audio/wav;base64," + btoa(
 					"RIFF" +
